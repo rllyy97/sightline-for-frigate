@@ -7,6 +7,16 @@
 import { cap } from '../../helpers.js';
 
 export const timelineModelMethods = {
+_timelineTrackHeight(track) {
+    // Use the same rendered coordinate space for animation and reconciliation.
+    // A minimum height here makes previews jump in compact desktop timelines.
+    return Math.max(1, Number(track?.clientHeight) || Number(track?.getBoundingClientRect?.().height) || 420);
+  },
+
+_timelineConfiguredPreviewHeight() {
+    return Math.max(48,Math.min(140,Math.round(Number(this._config?.timeline?.thumbnail_size ?? 84))));
+  },
+
 _timelineLabelInfo(ev) {
     const raw = this._normalizeObjectLabel(ev?.label ?? ev?.data?.label ?? '').toLowerCase();
     const aliases = {

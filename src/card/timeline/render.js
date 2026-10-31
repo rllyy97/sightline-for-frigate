@@ -156,7 +156,7 @@ _renderTimeline(forceFull=false) {
     // A cluster may overlap the viewport after its first event has already
     // scrolled away. In that case anchor to the first *actual* detection still
     // inside the window instead of clamping the old cluster start to an edge.
-    const trackPx=Math.max(track.clientHeight||420,360);
+    const trackPx=this._timelineTrackHeight(track);
     const metrics=this._timelineResponsiveMetrics(track);
     track.style.setProperty('--tl-glyph-size',`${metrics.glyphPx}px`);
     track.style.setProperty('--tl-glyph-gap',`${metrics.glyphGapPx}px`);
@@ -196,7 +196,7 @@ _renderTimeline(forceFull=false) {
     // Promote a sparse set of representative detection moments into thumbnail
     // cards. Use the same true in-window anchor as the glyph so cards cannot
     // remain glued to the viewport edge while their event scrolls away.
-    const cardH=Math.max(82,Math.min(118,trackPx*.19)), gap=Math.max(8,Math.min(14,trackPx*.018));
+    const cardH=this._timelineConfiguredPreviewHeight(), gap=Math.max(8,Math.min(14,trackPx*.018));
     // Fit previews to the *actual* rendered timeline height. The old 4-mobile /
     // 6-desktop cap hid perfectly valid thumbnails on tall phones, tablets and
     // portrait dashboards even when there was plenty of vertical room.

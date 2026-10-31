@@ -119,6 +119,7 @@ _updateTimelineLive() {
       el.style.visibility=''; el.style.pointerEvents='';
       el.style.top=`${yPct(anchor)}%`;
     });
+    const trackPx=this._timelineTrackHeight(track);
     track.querySelectorAll('.t-preview').forEach(el=>{
       const ev=byId.get(String(el.dataset.eventId));
       if(!ev) { el.style.visibility='hidden'; el.style.pointerEvents='none'; return; }
@@ -127,8 +128,7 @@ _updateTimelineLive() {
         el.style.visibility='hidden'; el.style.pointerEvents='none'; return;
       }
       el.style.visibility=''; el.style.pointerEvents='';
-      const trackPx=Math.max(track.clientHeight||420,360);
-      const cardH=el.offsetHeight||92;
+      const cardH=el.offsetHeight||this._timelineConfiguredPreviewHeight();
       const y=(yPct(anchor)/100)*trackPx;
       el.style.top=`${y-cardH/2}px`;
     });

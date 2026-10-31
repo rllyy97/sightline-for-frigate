@@ -9565,6 +9565,16 @@ const timelineInteractionMethods = mergeMethodGroups(
  * stable so existing card behavior and tests remain unchanged.
  */
 const timelineModelMethods = {
+_timelineTrackHeight(track) {
+    // Use the same rendered coordinate space for animation and reconciliation.
+    // A minimum height here makes previews jump in compact desktop timelines.
+    return Math.max(1, Number(track?.clientHeight) || Number(track?.getBoundingClientRect?.().height) || 420);
+  },
+
+_timelineConfiguredPreviewHeight() {
+    return Math.max(48,Math.min(140,Math.round(Number(this._config?.timeline?.thumbnail_size ?? 84))));
+  },
+
 _timelineLabelInfo(ev) {
     const raw = this._normalizeObjectLabel(ev?.label ?? ev?.data?.label ?? '').toLowerCase();
     const aliases = {
@@ -9990,6 +10000,7 @@ _updateTimelineLive() {
       el.style.visibility=''; el.style.pointerEvents='';
       el.style.top=`${yPct(anchor)}%`;
     });
+    const trackPx=this._timelineTrackHeight(track);
     track.querySelectorAll('.t-preview').forEach(el=>{
       const ev=byId.get(String(el.dataset.eventId));
       if(!ev) { el.style.visibility='hidden'; el.style.pointerEvents='none'; return; }
@@ -9998,8 +10009,7 @@ _updateTimelineLive() {
         el.style.visibility='hidden'; el.style.pointerEvents='none'; return;
       }
       el.style.visibility=''; el.style.pointerEvents='';
-      const trackPx=Math.max(track.clientHeight||420,360);
-      const cardH=el.offsetHeight||92;
+      const cardH=el.offsetHeight||this._timelineConfiguredPreviewHeight();
       const y=(yPct(anchor)/100)*trackPx;
       el.style.top=`${y-cardH/2}px`;
     });
@@ -10201,7 +10211,7 @@ _renderTimeline(forceFull=false) {
     // A cluster may overlap the viewport after its first event has already
     // scrolled away. In that case anchor to the first *actual* detection still
     // inside the window instead of clamping the old cluster start to an edge.
-    const trackPx=Math.max(track.clientHeight||420,360);
+    const trackPx=this._timelineTrackHeight(track);
     const metrics=this._timelineResponsiveMetrics(track);
     track.style.setProperty('--tl-glyph-size',`${metrics.glyphPx}px`);
     track.style.setProperty('--tl-glyph-gap',`${metrics.glyphGapPx}px`);
@@ -10241,7 +10251,7 @@ _renderTimeline(forceFull=false) {
     // Promote a sparse set of representative detection moments into thumbnail
     // cards. Use the same true in-window anchor as the glyph so cards cannot
     // remain glued to the viewport edge while their event scrolls away.
-    const cardH=Math.max(82,Math.min(118,trackPx*.19)), gap=Math.max(8,Math.min(14,trackPx*.018));
+    const cardH=this._timelineConfiguredPreviewHeight(), gap=Math.max(8,Math.min(14,trackPx*.018));
     // Fit previews to the *actual* rendered timeline height. The old 4-mobile /
     // 6-desktop cap hid perfectly valid thumbnails on tall phones, tablets and
     // portrait dashboards even when there was plenty of vertical room.
@@ -10940,10 +10950,6 @@ const multiviewTimelineMethods = {
     return browserMethods._click.call(this,e);
   },
 
-  _timelineConfiguredPreviewHeight() {
-    return Math.max(48,Math.min(140,Math.round(Number(this._config?.timeline?.thumbnail_size ?? 84))));
-  },
-
   _syncTimelinePreviewGeometry() {
     const track=this._$('#tl-track');
     if(!track)return;
@@ -10952,7 +10958,7 @@ const multiviewTimelineMethods = {
     const s=Number(this._winStart),e=Number(this._winEnd);
     const span=Math.max(1,e-s);
     const focus=Number.isFinite(Number(this._timelineFocusTs))?Number(this._timelineFocusTs):e;
-    const trackPx=Math.max(1,Number(track.clientHeight)||Number(track.getBoundingClientRect?.().height)||420);
+    const trackPx=this._timelineTrackHeight(track);
     const yPct=ts=>Math.max(0,Math.min(100,50+((focus-Number(ts))/span)*100));
     for(const preview of track.querySelectorAll('.t-preview[data-ts]')){
       const ts=Number(preview.dataset.ts);
