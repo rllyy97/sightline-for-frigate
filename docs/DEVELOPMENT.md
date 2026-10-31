@@ -28,7 +28,10 @@ terminal and do not reload the last working page.
   debounced refresh; it is not repainted directly by the preview.
 - **Reset fixtures:** create a fresh card and mock session. Favorites and
   reviewed state persist during that session and reset with this control.
-- **Mock HA requests:** inspect commands sent by the production card.
+- **Mock HA requests:** open the request log from the header toolbar.
+
+The preview uses the remaining window space below the toolbar, with scrolling
+inside the preview area and no outer padding.
 
 Controls are reflected in the URL so a scenario can be bookmarked, for example:
 http://127.0.0.1:5173/?scenario=offline&viewport=mobile&theme=light&cameras=1
@@ -52,7 +55,8 @@ so optimistic card mutations cannot silently mutate the mock backend. Unknown
 commands fail explicitly. Queries honor camera, time, limit, clip, and favorite
 constraints. This is a small adapter, not a general HA emulator.
 
-`dev/ha-elements.mjs` substitutes only `ha-camera-stream` and `ha-hls-player`.
+`dev/ha-elements.mjs` supplies the block-level `ha-card` shell and substitutes
+`ha-camera-stream` and `ha-hls-player`.
 The substitutes use native video and development-only hls.js. Real decoding,
 playback, pause and seek events reach the card's unchanged production
 controllers. HLS playlists use the normal Frigate proxy URL shapes; recording

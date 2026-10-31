@@ -29,5 +29,14 @@ class PreviewCameraStream extends HTMLElement {
   }
   disconnectedCallback(){this.shadowRoot.querySelector('video')?.pause();}
 }
+// HA's card shell is a block element. Leaving it undefined makes the browser
+// treat it as inline, adding line-box gaps above/below the preview.
+class PreviewCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({mode:'open'}).innerHTML='<style>:host{display:block}</style><slot></slot>';
+  }
+}
+customElements.define('ha-card',PreviewCard);
 customElements.define('ha-hls-player',PreviewHlsPlayer);
 customElements.define('ha-camera-stream',PreviewCameraStream);
