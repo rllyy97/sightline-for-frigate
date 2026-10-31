@@ -2267,7 +2267,7 @@ ${STYLES}
   z-index:9 !important;
   overflow:visible !important;
 }
-.card .t-ev .t-duration{
+.card .tl-track > .t-duration{
   position:absolute;
   left:calc(var(--tl-rail) - 3px);
   top:0;
@@ -2401,7 +2401,7 @@ ${STYLES}
 }
 
 /* monochrome timeline glyphs + no sticky edge events. */
-.card .t-ev .t-duration{
+.card .tl-track > .t-duration{
   width:3px !important;
   left:calc(var(--tl-rail) - 1px) !important;
   background:rgba(245,245,247,.28) !important;
@@ -2490,10 +2490,11 @@ ${STYLES}
   --tl-dot-size:15px;
   --tl-content:calc(var(--tl-rail) + var(--tl-event-lane));
 }
-.card .t-ev .t-duration{
+.card .tl-track > .t-duration{
   left:calc(var(--tl-rail) - 5px) !important;
   width:10px !important;
-  min-height:8px !important;
+  min-height:0 !important;
+  z-index:8;
   border-radius:999px !important;
   background:#4b9cf5 !important;
   box-shadow:none !important;
@@ -8887,7 +8888,9 @@ _wireScrub() {
       this._timelineInteracting=true;
       if (this._playing || this._activePlaybackCleanup) this._invalidatePlaybackForTimelineMove();
       clearTimeout(this._wt);
-      const shift=Math.round(delta/Math.max(1,rect.height)*span);
+      // Trackpads emit subpixel deltas. Keep fractional timestamps throughout
+      // the gesture so slow movement accumulates instead of rounding to zero.
+      const shift=delta/Math.max(1,rect.height)*span;
       let ns=this._winStart+shift, ne=this._winEnd+shift;
       let nf=(this._timelineFocusTs ?? ((this._winStart+this._winEnd)/2))+shift;
       const now=Math.floor(Date.now()/1000);
@@ -8901,7 +8904,7 @@ _wireScrub() {
       const crossedLive = previousFocus < now - 1 && nf >= now - 1;
       if(ns<0){const a=-ns;ns+=a;ne+=a;nf+=a;}
       this._winStart=ns;this._winEnd=ne;this._exhausted=false;
-      this._timelineFocusTs=Math.max(ns,Math.min(ne,Math.round(nf)));
+      this._timelineFocusTs=Math.max(ns,Math.min(ne,nf));
       if (crossedLive) {
         // Defer the live transition to the settled wheel callback so a burst
         // of wheel events cannot mount multiple live players.
@@ -9575,6 +9578,12 @@ _timelineConfiguredPreviewHeight() {
     return Math.max(48,Math.min(140,Math.round(Number(this._config?.timeline?.thumbnail_size ?? 84))));
   },
 
+_timelinePreviewOverscanPx() {
+    // Keep the card while its box can still overlap the clipped track, plus a
+    // small buffer so it is already mounted before scrolling into view.
+    return this._timelineConfiguredPreviewHeight()/2 + 16;
+  },
+
 _timelineLabelInfo(ev) {
     const raw = this._normalizeObjectLabel(ev?.label ?? ev?.data?.label ?? '').toLowerCase();
     const aliases = {
@@ -9867,6 +9876,7 @@ _timelineRecordingGaps(start, end) {
 _timelineNodeKey(el) {
     if (el.classList.contains('t-ev')) return `ev:${el.dataset.tick||''}`;
     if (el.classList.contains('t-preview')) return `preview:${el.dataset.eventId||''}`;
+    if (el.classList.contains('t-duration')) return `duration:${el.dataset.eventId||''}`;
     if (el.classList.contains('t-rec')) return `rec:${el.dataset.start||''}:${el.dataset.end||''}`;
     if (el.classList.contains('tl-no-recording')) return `norec:${el.dataset.gap||el.dataset.start||''}`;
     if (el.classList.contains('tl-scale-mark')) return `scale:${el.dataset.ts||''}`;
@@ -9984,33 +9994,42 @@ _updateTimelineLive() {
     // the viewport. That clamp was the cause of the post-zoom "stuck event"
     // artifact: an old marker/card remained pinned to the screen edge until
     // the timeline eventually crossed its original timestamp again.
+    const trackPx=this._timelineTrackHeight(track);
+    track.querySelectorAll('.t-duration').forEach(el=>{
+      const a=Math.max(s,Number(el.dataset.start));
+      const b=Math.min(e,Number(el.dataset.end));
+      if(!byId.has(String(el.dataset.eventId)) || !Number.isFinite(a) || !Number.isFinite(b) || b<=a) {
+        el.style.visibility='hidden'; return;
+      }
+      el.style.visibility='';
+      el.style.top=`${yPct(b)}%`;
+      el.style.height=`${((b-a)/span)*trackPx}px`;
+    });
     track.querySelectorAll('.t-ev').forEach(el=>{
       const ev=byId.get(String(el.dataset.tick));
       const a=Number(el.dataset.start);
       const b=Number(el.dataset.end);
       const anchor=Number.isFinite(Number(el.dataset.ts)) ? Number(el.dataset.ts) : Number(ev?.start_time);
       const overlaps=Number.isFinite(a)&&Number.isFinite(b) ? (b>=s && a<=e) : !!ev;
-      // Never pin a stale event to the top/bottom edge. Its duration may still
-      // overlap the window, but the class glyph belongs at its real timestamp.
-      // Once that anchor leaves the viewport, hide it until a full reconcile
-      // promotes a new in-window detection from the same cluster.
+      // The marker belongs at its real timestamp. Its separate duration bar
+      // may still overlap the window after this marker has left it.
       if(!ev || !overlaps || !Number.isFinite(anchor) || anchor<s || anchor>e) {
         el.style.visibility='hidden'; el.style.pointerEvents='none'; return;
       }
       el.style.visibility=''; el.style.pointerEvents='';
       el.style.top=`${yPct(anchor)}%`;
     });
-    const trackPx=this._timelineTrackHeight(track);
     track.querySelectorAll('.t-preview').forEach(el=>{
       const ev=byId.get(String(el.dataset.eventId));
       if(!ev) { el.style.visibility='hidden'; el.style.pointerEvents='none'; return; }
       const anchor=Number.isFinite(Number(el.dataset.ts)) ? Number(el.dataset.ts) : Number(ev.start_time);
-      if(!Number.isFinite(anchor) || anchor<s || anchor>e) {
+      const y=(.5+(focus-anchor)/span)*trackPx;
+      const overscan=this._timelinePreviewOverscanPx();
+      if(!Number.isFinite(anchor) || y < -overscan || y > trackPx+overscan) {
         el.style.visibility='hidden'; el.style.pointerEvents='none'; return;
       }
       el.style.visibility=''; el.style.pointerEvents='';
       const cardH=el.offsetHeight||this._timelineConfiguredPreviewHeight();
-      const y=(yPct(anchor)/100)*trackPx;
       el.style.top=`${y-cardH/2}px`;
     });
     track.querySelectorAll('.t-rec').forEach(el=>{
@@ -10153,12 +10172,9 @@ _renderTimeline(forceFull=false) {
     const s=this._winStart,e=this._winEnd,span=Math.max(1,e-s);
     if(!Number.isFinite(Number(this._timelineFocusTs))) this._timelineFocusTs=e;
     const focus=Number.isFinite(Number(this._timelineFocusTs)) ? Number(this._timelineFocusTs) : e;
-    // Cluster the complete loaded event set first, then crop clusters to the
-    // viewport. Clustering only visible events changes a cluster's identity at
-    // the viewport edge after zoom/pan and can leave an old thumbnail/marker
-    // visually pinned until the window crosses that event again.
-    const clusters=this._timelineClusters(this._timelineEvents())
-      .filter(cluster=>Number(cluster.end)>=s && Number(cluster.start)<=e);
+    // Keep grouping independent of the viewport. Duration bars, markers and
+    // preview boxes each have different visible bounds and are culled below.
+    const clusters=this._timelineClusters(this._timelineEvents());
     // Scrypted-style centered playhead: the selected wall-clock time sits at
     // the visual center while the timeline itself scrolls underneath it.
     const yPct = ts => Math.max(0,Math.min(100,50 + ((focus-Number(ts))/span)*100));
@@ -10208,9 +10224,8 @@ _renderTimeline(forceFull=false) {
     // Render Scrypted-style detection rows: a blue rail marker plus a separate
     // horizontal lane of monochrome class glyphs. Nearby activity bursts share
     // the same row, and repeated classes collapse to one glyph.
-    // A cluster may overlap the viewport after its first event has already
-    // scrolled away. In that case anchor to the first *actual* detection still
-    // inside the window instead of clamping the old cluster start to an edge.
+    // Choose stable, real timestamps from the complete clusters. Never move
+    // an anchor onto the viewport edge just to keep another artifact visible.
     const trackPx=this._timelineTrackHeight(track);
     const metrics=this._timelineResponsiveMetrics(track);
     track.style.setProperty('--tl-glyph-size',`${metrics.glyphPx}px`);
@@ -10219,7 +10234,7 @@ _renderTimeline(forceFull=false) {
     track.style.setProperty('--tl-event-lane',`${metrics.eventLanePx}px`);
     track.style.setProperty('--tl-dot-size',`${metrics.dotPx}px`);
     const timelineItems=clusters.map(cluster=>{
-      const ev=this._timelineClusterAnchor(cluster,s,e);
+      const ev=this._timelineClusterAnchor(cluster,-Infinity,Infinity);
       return ev ? {cluster,ev,ts:Number(ev.start_time)} : null;
     }).filter(Boolean);
     const visualGroups=this._timelineVisualGroups(timelineItems,span,trackPx);
@@ -10227,6 +10242,16 @@ _renderTimeline(forceFull=false) {
     visualGroups.forEach(group=>{
       const {anchorItem,ts:markerTs}=group;
       const {cluster,ev}=anchorItem;
+      // Duration belongs to the entire event interval, independently of the
+      // start marker. Newer time is above older time on this vertical track.
+      const durationStart=Math.min(...group.items.map(item=>Number(item.cluster.start)));
+      const durationEnd=Number(group.endTs);
+      const a=Math.max(s,durationStart), b=Math.min(e,durationEnd);
+      if(b>a) {
+        const top=yPct(b), height=((b-a)/span)*trackPx;
+        html+=`<div class="t-duration" data-event-id="${ev.id}" data-start="${durationStart}" data-end="${durationEnd}" style="top:${top}%;height:${height}px" aria-hidden="true"></div>`;
+      }
+      if(markerTs<s || markerTs>e) return;
       const pct=yPct(markerTs);
       const selected=group.events.some(x=>String(x.id)===String(this._timelineSelected));
       const info=ev._tl||this._timelineLabelInfo(ev);
@@ -10238,33 +10263,32 @@ _renderTimeline(forceFull=false) {
       const shownLabels=allLabels.slice(0,metrics.maxGlyphs);
       const glyphs=this._config.timeline.show_glyphs ? shownLabels
         .map(label=>`<span class="t-glyph">${timelineGlyph(label.key)}</span>`).join('') : '';
-      const durationEnd=Math.min(e,Math.max(markerTs,Number(group.endTs)||Number(cluster.end)));
-      const durationPx=Math.max(3,((durationEnd-markerTs)/span)*trackPx);
       const clusterClass=group.totalDetections>1?' clustered':'';
       const labelText=group.labels.map(x=>x.display).join(', ')||info.display;
       const aria=group.totalDetections>1
         ? `${labelText} detection cluster at ${this._timelineTime(markerTs)} (${group.totalDetections} detections)`
         : `${info.display} at ${this._timelineTime(markerTs)}`;
-      html+=`<button class="t-ev ${selected?'selected':''}${clusterClass}" data-tick="${ev.id}" data-ts="${markerTs}" data-start="${group.startTs}" data-end="${group.endTs}" style="top:${pct}%" aria-label="${aria}"><span class="t-duration" style="height:${durationPx}px"></span><span class="t-dot"><span class="t-glyph-stack">${glyphs}</span></span><span class="t-connector"></span></button>`;
+      html+=`<button class="t-ev ${selected?'selected':''}${clusterClass}" data-tick="${ev.id}" data-ts="${markerTs}" data-start="${group.startTs}" data-end="${group.endTs}" style="top:${pct}%" aria-label="${aria}"><span class="t-dot"><span class="t-glyph-stack">${glyphs}</span></span><span class="t-connector"></span></button>`;
     });
 
     // Promote a sparse set of representative detection moments into thumbnail
-    // cards. Use the same true in-window anchor as the glyph so cards cannot
-    // remain glued to the viewport edge while their event scrolls away.
+    // cards. Retain cards slightly beyond the viewport so their visible tails
+    // disappear through the track's clipping boundary rather than popping out.
     const cardH=this._timelineConfiguredPreviewHeight(), gap=Math.max(8,Math.min(14,trackPx*.018));
     // Fit previews to the *actual* rendered timeline height. The old 4-mobile /
     // 6-desktop cap hid perfectly valid thumbnails on tall phones, tablets and
     // portrait dashboards even when there was plenty of vertical room.
+    const overscan=this._timelinePreviewOverscanPx();
     const configuredThumbMax=Math.max(0,Math.round(Number(this._config?.timeline?.max_thumbnails ?? 12)));
     const maxCards=this._config.timeline.show_thumbnails && configuredThumbMax>0
-      ? Math.max(1,Math.min(configuredThumbMax,Math.floor((trackPx+gap)/(cardH+gap)))) : 0;
+      ? Math.max(1,Math.min(configuredThumbMax,Math.ceil((trackPx+2*overscan+gap)/(cardH+gap)))) : 0;
     const candidates=visualGroups.map(group=>({
       group,
       cluster:group.anchorItem.cluster,
       ev:group.anchorItem.ev,
       ts:group.ts,
-      y:(yPct(group.ts)/100)*trackPx
-    }));
+      y:(.5+(focus-Number(group.ts))/span)*trackPx
+    })).filter(c=>c.y>=-overscan && c.y<=trackPx+overscan);
     const chosen=[];
     const selectedCandidate=this._timelineSelected
       ? candidates.find(c=>c.group.events.some(ev=>String(ev.id)===String(this._timelineSelected)))
@@ -10959,7 +10983,7 @@ const multiviewTimelineMethods = {
     const span=Math.max(1,e-s);
     const focus=Number.isFinite(Number(this._timelineFocusTs))?Number(this._timelineFocusTs):e;
     const trackPx=this._timelineTrackHeight(track);
-    const yPct=ts=>Math.max(0,Math.min(100,50+((focus-Number(ts))/span)*100));
+    const yPct=ts=>50+((focus-Number(ts))/span)*100;
     for(const preview of track.querySelectorAll('.t-preview[data-ts]')){
       const ts=Number(preview.dataset.ts);
       preview.style.setProperty('height',`${h}px`,'important');

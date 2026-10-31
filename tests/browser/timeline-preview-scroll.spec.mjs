@@ -21,7 +21,7 @@ for (const thumbnailHeight of [48, 84, 140]) {
       card._winStart = focus - 300;
       card._winEnd = focus + 300;
       card._renderTimeline();
-      const preview = track.querySelector(`[data-event-id="${card._events[0].id}"]`);
+      const preview = track.querySelector(`.t-preview[data-event-id="${card._events[0].id}"]`);
       const image = preview.querySelector('img');
       const measurements = [];
       for (let shift = 0; shift <= 100; shift += 20) {
@@ -37,7 +37,7 @@ for (const thumbnailHeight of [48, 84, 140]) {
         measurements.push({
           jump: Math.abs(moving.top - reconciled.top),
           markerError: Math.abs(moving.top + moving.height / 2 - (marker.top + marker.height / 2)),
-          samePreview: track.querySelector(`[data-event-id="${card._events[0].id}"]`) === preview,
+          samePreview: track.querySelector(`.t-preview[data-event-id="${card._events[0].id}"]`) === preview,
           sameImage: preview.querySelector('img') === image,
           trackHeight: trackBox.height,
         });

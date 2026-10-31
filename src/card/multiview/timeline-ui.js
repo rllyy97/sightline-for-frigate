@@ -64,7 +64,7 @@ export const multiviewTimelineMethods = {
     const span=Math.max(1,e-s);
     const focus=Number.isFinite(Number(this._timelineFocusTs))?Number(this._timelineFocusTs):e;
     const trackPx=this._timelineTrackHeight(track);
-    const yPct=ts=>Math.max(0,Math.min(100,50+((focus-Number(ts))/span)*100));
+    const yPct=ts=>50+((focus-Number(ts))/span)*100;
     for(const preview of track.querySelectorAll('.t-preview[data-ts]')){
       const ts=Number(preview.dataset.ts);
       preview.style.setProperty('height',`${h}px`,'important');
